@@ -1,114 +1,160 @@
-# Define the backup Lambda function if backup is enabled
-resource "aws_lambda_function" "backup_lambda" {
-  function_name    = "opensearch_backup_lambda"
-  role             = aws_iam_role.backup_lambda_role.arn
-  handler          = "backup.lambda_handler"
-  runtime          = "python3.9"
-  timeout          = 30
-  memory_size      = 256
-  filename         = "${path.module}/backup.py"
-  source_code_hash = filebase64sha256("${path.module}/backup.py")
+import logging
+import boto3
+import requests
+import json
+from requests_aws4auth import AWS4Auth
+import datetime
 
-  environment {
-    variables = {
-      DOMAIN_NAME          = var.domain_name
-      BUCKET_NAME          = var.backup_bucket_name
-      RETENTION_DAYS       = var.backup_retention_period
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+def get_opensearch_endpoint(domain_name):
+    region = 'us-west-2'
+    service = 'es'
+    session = boto3.Session()
+    credentials = session.get_credentials()
+    awsauth = AWS4Auth(credentials.access_key, credentials.secret_key, region, service, session_token=credentials.token)
+    client = session.client('es')
+
+    # Retrieve domain information
+    response = client.describe_elasticsearch_domain(DomainName=domain_name)
+
+    # Extract the endpoint URL from the response
+    endpoint = response['DomainStatus']['Endpoints']['vpc']
+    host = f"https://{endpoint}/"
+
+    return host
+
+def register_repository(awsauth, url, repository_name, bucket_name, execution_role_arn):
+    # Check if the repository already exists
+    r = requests.get(url, auth=awsauth)
+    if r.status_code == 200:
+        repositories = r.json().keys()
+        if repository_name in repositories:
+            logger.info(f"Repository '{repository_name}' already exists.")
+            return
+
+    date_prefix = datetime.datetime.now().strftime('%Y-%m-%d')
+
+    # Register repository
+    payload = {
+        "type": "s3",
+        "settings": {
+            "bucket": bucket_name,
+            "region": "us-west-2",
+            "role_arn": execution_role_arn,
+            "base_path": f"{repository_name}/snapshots/{date_prefix}"
+        }
     }
-  }
 
-  # Conditionally enable this resource based on the backup variable
-  count = var.backup ? 1 : 0
-}
+    headers = {"Content-Type": "application/json"}
 
-# IAM role for the Lambda function
-resource "aws_iam_role" "backup_lambda_role" {
-  name               = "backup_lambda_role"
-  assume_role_policy = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "",
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "lambda.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole"
+    r = requests.put(url, auth=awsauth, json=payload, headers=headers)
+
+    logger.info("register_repository %s", r.status_code)
+    logger.info("register_repository %s", r.text)
+
+def capture_snapshot(url, awsauth, retention_period, domain_name):
+    logger.info('Taking snapshot of all indices')
+    date_prefix = datetime.datetime.now().strftime('%Y-%m-%d')
+    snapshot_name = f"{date_prefix}-all-indices"
+    url += f"/{snapshot_name}"
+
+    payload = {
+        "indices": "all",
+        "ignore_unavailable": 'true',
+        "include_global_state": 'false',
+        "partial": 'false',
+        "retention_period": f"{retention_period}d"
     }
-  ]
-}
-EOF
-}
 
-# Attach the necessary policies to the IAM role
-resource "aws_iam_role_policy_attachment" "backup_lambda_es_policy_attachment" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonESFullAccess"
-  role       = aws_iam_role.backup_lambda_role.name
-}
+    logger.info('%s Snapshot is created by this name', url)
 
-resource "aws_iam_policy" "backup_lambda_s3_policy" {
-  name        = "backup_lambda_s3_policy"
-  description = "Allows backup Lambda function to access S3 for backups"
+    headers = {"Content-Type": "application/json"}
 
-  policy = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:GetObject",
-        "s3:DeleteObject"
-      ],
-      "Resource": "arn:aws:s3:::${var.backup_bucket_name}/*"
-    }
-  ]
-}
-EOF
-}
+    try:
+        r = requests.put(url, auth=awsauth, json=payload, headers=headers)
+        r.raise_for_status()
+        logger.info('Snapshot creation successful. Response: %s', r.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Failed to create snapshot. Error: %s", str(e))
 
-resource "aws_iam_role_policy_attachment" "backup_lambda_s3_policy_attachment" {
-  policy_arn = aws_iam_policy.backup_lambda_s3_policy.arn
-  role       = aws_iam_role.backup_lambda_role.name
-}
+def cleanup_old_snapshots(url, awsauth, retention_period, domain_name):
+    logger.info('Cleaning up old snapshots')
+    url += f"/"
 
-# Add the necessary Lambda environment variables
-resource "aws_lambda_permission" "backup_lambda_permission" {
-  statement_id  = "AllowExecutionFromCloudWatch"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.backup_lambda.arn
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.backup_lambda_trigger.arn
-}
+    try:
+        r = requests.get(url, auth=awsauth)
+        r.raise_for_status()
+        snapshots = r.json().keys()
+        today = datetime.datetime.now()
+        deleted_snapshots = 0
+        for snapshot in snapshots:
+            if not snapshot.endswith('-all-indices'):
+                continue
+            snapshot_date_str = snapshot.replace('-all-indices', '')
+            snapshot_date = datetime.datetime.strptime(snapshot_date_str, '%Y-%m-%d')
+            delta = today - snapshot_date
+            if delta.days > retention_period:
+                logger.info(f"Deleting old snapshot: {snapshot}")
+                delete_url = f"{url}/{snapshot}"
+                r = requests.delete(delete_url, auth=awsauth)
+                r.raise_for_status()
+                logger.info(f"Deleted snapshot: {snapshot}")
+                deleted_snapshots += 1
+        if deleted_snapshots == 0:
+            logger.info("No old snapshots found to delete.")
+    except requests.exceptions.RequestException as e:
+        logger.error("Failed to retrieve or delete snapshots. Error: %s", str(e))
 
-# Event trigger for the Lambda function
-resource "aws_cloudwatch_event_rule" "backup_lambda_trigger" {
-  name                = "backup_lambda_trigger"
-  description         = "Event trigger for the backup Lambda function"
-  schedule_expression = "cron(0 0 * * ? *)"
-}
+def lambda_handler(event, context):
+    logger.info(event)
 
-resource "aws_cloudwatch_event_target" "backup_lambda_target" {
-  rule  = aws_cloudwatch_event_rule.backup_lambda_trigger.name
-  arn   = aws_lambda_function.backup_lambda.arn
-}
+    # Getting environment and domain names from the event configuration
+    environment_name = event.get('environment_name', '')  # prd, dev, stg, qat
+    domain_name = event.get('domain_name', '')
 
+    if not environment_name or not domain_name:
+        logger.error("Missing required parameters.")
+        return False
 
+    # Generate OpenSearch host using the domain name
+    host = get_opensearch_endpoint(domain_name)
 
------------------------------
-output "backup_lambda_arn" {
-  description = "The ARN of the backup Lambda function"
-  value       = aws_lambda_function.backup_lambda.arn
-}
+    # Construct the URL for repository registration and snapshot capture
+    path = f'_snapshot/snapshots'
+    url = host + path
 
-output "backup_lambda_role_arn" {
-  description = "The ARN of the IAM role attached to the backup Lambda function"
-  value       = aws_iam_role.backup_lambda_role.arn
-}
+    # Repository name
+    repository_name = f"{domain_name}/{environment_name}"
 
-output "backup_lambda_execution_role_arn" {
-  description = "The ARN of the execution role for the backup Lambda function"
-  value       = aws_iam_role.backup_lambda_role.arn
-}
+    # Get team-specific S3 bucket name
+    bucket_name = event.get('backup_bucket_name', 'atlas-opensearch-backup')
+
+    # Check if backup is enabled
+    backup_enabled = event.get('backup_enabled', False)
+
+    if backup_enabled:
+        # Get the execution role ARN from the event
+        execution_role_arn = event.get('execution_role_arn', '')
+
+        if not execution_role_arn:
+            logger.error("Missing execution role ARN.")
+            return False
+
+        # Register repository
+        register_repository(AWS4Auth, url, repository_name, bucket_name, execution_role_arn)
+
+        # Retention period
+        retention_period = int(event.get('backup_retention_period', 7))
+
+        # Take snapshots
+        capture_snapshot(url, AWS4Auth, retention_period, domain_name)
+
+        # Cleanup old snapshots
+        cleanup_old_snapshots(url, AWS4Auth, retention_period, domain_name)
+    else:
+        logger.info("Backup is not enabled for this environment.")
+
+    return True
