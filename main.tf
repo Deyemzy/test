@@ -1,29 +1,45 @@
-Certainly! Below is a complete example of how you can structure your Terraform code using modules, including variables, providers, and outputs for setting up EventBridge rules, SQS queues, and Lambda functions in each linked account:
+Sure, I understand. Here's how you can structure your Terraform code with modules placed in a "modules" directory inside the "src" directory:
+
+First, create a directory structure like this:
+
+```
+auto_tagging_solution/
+  |- main.tf
+  |- variables.tf
+  |- providers.tf
+  |- src/
+      |- modules/
+           |- eventbridge/
+           |    |- main.tf
+           |    |- variables.tf
+           |- sqs_queues/
+           |    |- main.tf
+           |    |- variables.tf
+           |- lambda_functions/
+                |- main.tf
+                |- variables.tf
+```
 
 **auto_tagging_solution/main.tf:**
 
 ```hcl
-provider "aws" {
-  region = "us-east-1"  # Replace with your desired region
-}
-
 variable "linked_account_ids" {
   type    = list(string)
   default = ["account_id_1", "account_id_2", "account_id_3"]  # Replace with actual account IDs
 }
 
 module "eventbridge" {
-  source             = "./eventbridge"
+  source             = "./src/modules/eventbridge"
   linked_account_ids = var.linked_account_ids
 }
 
 module "sqs_queues" {
-  source             = "./sqs_queues"
+  source             = "./src/modules/sqs_queues"
   linked_account_ids = var.linked_account_ids
 }
 
 module "lambda_functions" {
-  source             = "./lambda_functions"
+  source             = "./src/modules/lambda_functions"
   linked_account_ids = var.linked_account_ids
 }
 ```
@@ -37,7 +53,17 @@ variable "linked_account_ids" {
 }
 ```
 
-**auto_tagging_solution/eventbridge/main.tf:**
+**auto_tagging_solution/providers.tf:**
+
+```hcl
+provider "aws" {
+  region = "us-east-1"  # Replace with your desired region
+}
+```
+
+Now, place the module files in the respective directories:
+
+**auto_tagging_solution/src/modules/eventbridge/main.tf:**
 
 ```hcl
 variable "linked_account_ids" {}
@@ -53,7 +79,7 @@ output "eventbridge_rule_names" {
 }
 ```
 
-**auto_tagging_solution/sqs_queues/main.tf:**
+**auto_tagging_solution/src/modules/sqs_queues/main.tf:**
 
 ```hcl
 variable "linked_account_ids" {}
@@ -82,7 +108,7 @@ output "sqs_queue_names" {
 }
 ```
 
-**auto_tagging_solution/lambda_functions/main.tf:**
+**auto_tagging_solution/src/modules/lambda_functions/main.tf:**
 
 ```hcl
 variable "linked_account_ids" {}
@@ -127,6 +153,6 @@ output "lambda_function_names" {
 }
 ```
 
-In this example, each module has been extended to include outputs for relevant resource names. Outputs allow you to see the generated names of the resources that were created. You can access these outputs using the `terraform output` command after running the Terraform apply.
+With this structure, the modules are located inside the "src/modules" directory, and the main configuration in the "auto_tagging_solution" directory references these modules. This approach helps keep your code organized and modular.
 
-Please replace placeholders with actual configurations, paths, and other details as per your organization's requirements.
+Please replace placeholders with actual configurations, paths, and other details as needed.
