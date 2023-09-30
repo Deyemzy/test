@@ -1,5 +1,4 @@
 import logging
-import time
 from confluent_kafka import Consumer, TopicPartition
 from confluent_kafka.admin import AdminClient
 from datetime import datetime, timedelta
@@ -39,16 +38,21 @@ for topic_name in topic_names:
     unused_partitions = 0
     for partition in partitions:
         tp = TopicPartition(topic_name, partition.id)
+
+        # Seek to the beginning to get the earliest offset
+        earliest_committed_offset = consumer.committed([tp])[0]
+        if earliest_committed_offset.offset > 0:
+            earliest_offset = earliest_committed_offset.offset
+        else:
+            earliest_offset = 0
         
-        consumer.seek_to_beginning(tp)
-        earliest_offset = consumer.position(tp)
-        
-        consumer.seek_to_end(tp)
+        # Seek to the end to get the latest offset
+        consumer.seek(tp, 0, whence=2)
         current_offset = consumer.position(tp)
 
         timestamp = consumer.committed(tp)
-        last_activity = datetime.utcfromtimestamp(timestamp.timestamp/1000.0) if timestamp else None
-        
+        last_activity = datetime.utcfromtimestamp(timestamp.timestamp / 1000.0) if timestamp else None
+
         if earliest_offset == current_offset and last_activity and last_activity < inactive_threshold:
             unused_partitions += 1
 
