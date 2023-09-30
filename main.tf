@@ -1,85 +1,76 @@
-from kafka import KafkaConsumer, TopicPartition
-from kafka.admin import KafkaAdminClient, NewTopic
-from kafka.errors import KafkaTimeoutError
+import logging
 import time
+from confluent_kafka import Consumer, TopicPartition
+from confluent_kafka.admin import AdminClient
 from datetime import datetime, timedelta
 
+# Setup Logging Configuration
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 # Kafka broker and topic details
-bootstrap_servers = "localhost:9092"  # Replace with your Kafka broker(s)
-group_id = "consumer_group"  # Replace with your consumer group ID
-lag_threshold = 100  # Define a threshold for consumer lag (adjust as needed)
-inactive_threshold_days = 7  # Define a threshold for topic inactivity (adjust as needed)
+bootstrap_servers = "pkc-n98pk.us-west-2.aws.confluent.cloud:9092"
+group_id = "hub-template-job-orderrate"
+lag_threshold = 100
+inactive_threshold_days = 7
 
-# Create a Kafka consumer for monitoring consumer lag
-consumer = KafkaConsumer(
-    bootstrap_servers=bootstrap_servers,
-    group_id=group_id,
-    auto_offset_reset="latest"
-)
+conf = {
+    'bootstrap.servers': bootstrap_servers,
+    'security.protocol': 'SASL_SSL',
+    'sasl.mechanism': 'PLAIN',
+    'sasl.username': 'WVRSK2IEPLMOKOP5',
+    'sasl.password': 'dxHglglamGcxXne08Ac2o24ckZBaCmYzCLzyLiircTLmRQg4+l3bDYFBLAQLgmvY',
+    'group.id': group_id,
+    'auto.offset.reset': 'smallest'
+}
 
-# Create a Kafka AdminClient to list and delete topics
-admin_client = KafkaAdminClient(bootstrap_servers=bootstrap_servers)
+consumer = Consumer(conf)
+admin_client = AdminClient(conf)
 
-# List Kafka topics
-topics = admin_client.list_topics()
-topic_names = [topic for topic in topics if not topic.startswith("__")]
+metadata = admin_client.list_topics(timeout=10)
+topic_names = [topic for topic in metadata.topics]
 
-# Get current time
+# Log topics and their partition counts
+for topic, topic_metadata in metadata.topics.items():
+    logging.info(f"Topic {topic} has {len(topic_metadata.partitions)} partitions.")
+
 current_time = datetime.now()
+inactive_threshold = current_time - timedelta(days=inactive_threshold_days)
+last_activity = inactive_threshold
 
-# Iterate over topics and check for inactivity
 for topic_name in topic_names:
-    try:
-        # Subscribe to the topic to get partitions
-        consumer.subscribe([topic_name])
-        partitions = consumer.assignment()
+    logging.info(f"Subscribing to topic: {topic_name}")
+    consumer.subscribe([topic_name])
+    time.sleep(2)  # Sleep to allow time for assignment
+    partitions = consumer.assignment()
+    logging.info(f"Assigned partitions for topic {topic_name}: {partitions}")
+    
+    total_lag = 0
+    for partition in partitions:
+        tp = TopicPartition(topic_name, partition.partition)
+        consumer.assign([tp])
+        
+        latest_offset = consumer.position(tp)
+        consumer.seek_to_beginning(tp)
+        earliest_offset = consumer.position(tp)
+        consumer.seek_to_end(tp)
+        current_offset = consumer.position(tp)
 
-        # Calculate the earliest timestamp to consider a topic as inactive
-        inactive_threshold = current_time - timedelta(days=inactive_threshold_days)
+        lag = latest_offset - current_offset
+        if earliest_offset == current_offset:
+            last_activity = inactive_threshold
+        else:
+            timestamp = consumer.committed(tp)
+            last_activity = datetime.utcfromtimestamp(timestamp/1000.0)
 
-        # Check consumer lag for each partition
-        total_lag = 0
-        for partition in partitions:
-            tp = TopicPartition(topic_name, partition)
-            consumer.assign([tp])
-            consumer.seek_to_end(tp)
-            latest_offset = consumer.position(tp)
-            consumer.seek_to_beginning(tp)
-            earliest_offset = consumer.position(tp)
-            consumer.seek_to_end(tp)
-            current_offset = consumer.position(tp)
-            consumer.seek(tp, current_offset)
+        if lag > lag_threshold:
+            logging.warning(f"Topic '{topic_name}' Partition {partition.partition} has high lag ({lag} messages). Last activity for Partition {partition.partition}: {last_activity}")
 
-            # Calculate consumer lag
-            lag = latest_offset - current_offset
+        total_lag += lag
 
-            # Check if the topic has been inactive for the specified days
-            if earliest_offset == current_offset:
-                last_activity = inactive_threshold
-            else:
-                last_activity = datetime.utcfromtimestamp(
-                    consumer.timestamp(tp, earliest_offset) / 1000.0
-                )
+    if total_lag <= lag_threshold and last_activity < inactive_threshold:
+        logging.info(f"Topic '{topic_name}' is potentially unused and can be deleted.")
+        # Uncomment the line below to delete the topic if needed
+        # admin_client.delete_topics([topic_name])
 
-            if lag > lag_threshold:
-                print(
-                    f"Topic '{topic_name}' Partition {partition} has high lag ({lag} messages)."
-                )
-                print(
-                    f"Last activity for Partition {partition}: {last_activity}"
-                )
-
-        # If the total lag is below the threshold and there's no recent activity, consider the topic for deletion
-        if total_lag <= lag_threshold and last_activity < inactive_threshold:
-            print(f"Topic '{topic_name}' is potentially unused and can be deleted.")
-            # Uncomment the line below to delete the topic
-            # admin_client.delete_topics(topic_names=[topic_name])
-
-    except KafkaTimeoutError:
-        print(f"Timeout while checking topic '{topic_name}'.")
-    except Exception as e:
-        print(f"Error checking topic '{topic_name}': {str(e)}")
-
-# Close the Kafka consumer and AdminClient
 consumer.close()
-admin_client.close()
+logging.info("Consumer closed.")
