@@ -1,5 +1,5 @@
 import logging
-from confluent_kafka import Consumer, TopicPartition
+from confluent_kafka import Consumer, TopicPartition, OFFSET_END, OFFSET_BEGINNING
 from confluent_kafka.admin import AdminClient
 from datetime import datetime, timedelta
 
@@ -30,7 +30,7 @@ topic_names = [topic.topic for topic in metadata.topics.values() if topic.topic.
 
 for topic_name in topic_names:
     logging.info(f"Checking topic: {topic_name}")
-    
+
     # Fetch topic's partition details
     topic_metadata = admin_client.list_topics(topic=topic_name, timeout=10)
     partitions = topic_metadata.topics[topic_name].partitions.values()
@@ -39,16 +39,11 @@ for topic_name in topic_names:
     for partition in partitions:
         tp = TopicPartition(topic_name, partition.id)
 
-        # Seek to the beginning to get the earliest offset
-        earliest_committed_offset = consumer.committed([tp])[0]
-        if earliest_committed_offset.offset > 0:
-            earliest_offset = earliest_committed_offset.offset
-        else:
-            earliest_offset = 0
-        
-        # Seek to the end to get the latest offset
-        consumer.seek(tp, 0, whence=2)
-        current_offset = consumer.position(tp)
+        # Get the earliest offset
+        earliest_offset = consumer.get_watermark_offsets(tp, timeout=1, cached=False)[0]
+
+        # Get the latest offset
+        current_offset = consumer.get_watermark_offsets(tp, timeout=1, cached=False)[1]
 
         timestamp = consumer.committed(tp)
         last_activity = datetime.utcfromtimestamp(timestamp.timestamp / 1000.0) if timestamp else None
