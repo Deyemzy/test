@@ -27,25 +27,18 @@ consumer = Consumer(conf)
 admin_client = AdminClient(conf)
 
 metadata = admin_client.list_topics(timeout=10)
-topic_names = [topic for topic in metadata.topics if topic.startswith("tango.dev")]
-
-current_time = datetime.now()
-inactive_threshold = current_time - timedelta(days=inactive_threshold_days)
+topic_names = [topic.topic for topic in metadata.topics.values() if topic.topic.startswith("tango.dev")]
 
 for topic_name in topic_names:
     logging.info(f"Checking topic: {topic_name}")
     
-    consumer.subscribe([topic_name])
-    time.sleep(2)  # Allow time for partition assignment
-    
-    partitions = consumer.assignment()
-    if not partitions:
-        logging.warning(f"No partitions assigned for topic {topic_name}. Skipping.")
-        continue
+    # Fetch topic's partition details
+    topic_metadata = admin_client.list_topics(topic=topic_name, timeout=10)
+    partitions = topic_metadata.topics[topic_name].partitions.values()
 
     unused_partitions = 0
     for partition in partitions:
-        tp = TopicPartition(topic_name, partition.partition)
+        tp = TopicPartition(topic_name, partition.id)
         
         consumer.seek_to_beginning(tp)
         earliest_offset = consumer.position(tp)
