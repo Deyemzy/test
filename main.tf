@@ -46,6 +46,8 @@ for topic_name in topic_names:
     logging.info(f"Assigned partitions for topic {topic_name}: {partitions}")
     
     total_lag = 0
+    partition_last_activities = []  # List to collect last_activity for each partition
+
     for partition in partitions:
         tp = TopicPartition(topic_name, partition.partition)
         
@@ -63,6 +65,8 @@ for topic_name in topic_names:
             timestamp = consumer.committed(tp).timestamp
             last_activity = datetime.utcfromtimestamp(timestamp / 1000.0)
         
+        partition_last_activities.append(last_activity)  # Add this partition's last activity to the list
+        
         if lag > lag_threshold:
             logging.warning(f"Topic '{topic_name}' Partition {partition.partition} has high lag ({lag} messages). Last activity for Partition {partition.partition}: {last_activity}")
         else:
@@ -70,7 +74,9 @@ for topic_name in topic_names:
         
         total_lag += lag
 
-    if total_lag <= lag_threshold and last_activity < inactive_threshold:
+    # After all partitions for a topic are processed, check if the topic is unused
+    latest_partition_activity = max(partition_last_activities) if partition_last_activities else inactive_threshold
+    if total_lag <= lag_threshold and latest_partition_activity < inactive_threshold:
         logging.info(f"Topic '{topic_name}' is potentially unused and can be deleted.")
         # Uncomment the line below to delete the topic if needed
         # admin_client.delete_topics([topic_name])
