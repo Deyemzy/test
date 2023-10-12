@@ -1,23 +1,3 @@
-try:
-    csv_files = [f for f in os.listdir(path) if f.endswith('_Lavender_usused_topics.csv')]
-except FileNotFoundError:
-    logging.error(f"Directory not found: {path}")
-    raise
-except PermissionError:
-    logging.error(f"No permission to read directory: {path}")
-    raise
-
-# If there are no CSV files, log a warning and exit
-if not csv_files:
-    logging.warning(f"No CSV files found in directory: {path}")
-    exit()
-
-# Dictionary to count the number of days each topic is marked as unused
-unused_counts = defaultdict(int)
-
-# Sort files to ensure they are processed in order
-csv_files = sorted(csv_files)
-
 # Iterate over all CSV files
 for file_index, file_name in enumerate(csv_files, start=1):
     logging.info(f"Processing file: {file_name}")
@@ -41,25 +21,13 @@ for file_index, file_name in enumerate(csv_files, start=1):
     except PermissionError:
         logging.error(f"No permission to read file: {file_name}")
         continue
+    
+    # Debug log to check the dictionary during processing
+    logging.debug(f"Unused counts after processing {file_name}: {unused_counts}")
+
+# Debug log to check the threshold and unused counts
+logging.debug(f"Threshold for consistently unused topics: {7 + 9 * (len(csv_files) - 1)}")
+logging.debug(f"Unused counts: {unused_counts}")
 
 # Identify topics that are unused in all files
 consistently_unused_topics = [topic for topic, count in unused_counts.items() if count == 7 + 9 * (len(csv_files) - 1)]
-
-# Output the unused topics to console
-logging.info(f"Topics unused across all checked days: {', '.join(consistently_unused_topics)}")
-
-# Save the consistently unused topics to a new CSV file
-output_file = os.path.join(path, 'consistently_unused_topics.csv')
-try:
-    with open(output_file, 'w', newline='') as file:
-        writer = csv.writer(file)
-        # Writing header
-        writer.writerow(["Topic Name", "Unused Count (days)"])
-        # Writing data
-        for topic in consistently_unused_topics:
-            writer.writerow([topic, unused_counts[topic]])
-except PermissionError:
-    logging.error(f"No permission to write to: {output_file}")
-    raise
-
-logging.info(f"Consistently unused topics saved to: {output_file}")
