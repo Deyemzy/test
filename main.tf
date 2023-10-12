@@ -12,11 +12,14 @@ if not csv_files:
     logging.warning(f"No CSV files found in directory: {path}")
     exit()
 
-# Dictionary to count the number of files each topic is marked as unused
+# Dictionary to count the number of days each topic is marked as unused
 unused_counts = defaultdict(int)
 
+# Sort files to ensure they are processed in order
+csv_files = sorted(csv_files)
+
 # Iterate over all CSV files
-for file_index, file_name in enumerate(sorted(csv_files), start=1):
+for file_index, file_name in enumerate(csv_files, start=1):
     logging.info(f"Processing file: {file_name}")
     try:
         with open(os.path.join(path, file_name), 'r') as file:
@@ -31,7 +34,7 @@ for file_index, file_name in enumerate(sorted(csv_files), start=1):
                 if "Total unused topics" in row[0]:  # Stop when summary lines are reached
                     break
                 topic_name, _ = row
-                unused_counts[topic_name] += file_index
+                unused_counts[topic_name] += 7 + (file_index - 1)
     except FileNotFoundError:
         logging.error(f"File not found: {file_name}")
         continue
@@ -40,7 +43,7 @@ for file_index, file_name in enumerate(sorted(csv_files), start=1):
         continue
 
 # Identify topics that are unused in all files
-consistently_unused_topics = [topic for topic, count in unused_counts.items() if count == sum(range(1, len(csv_files) + 1))]
+consistently_unused_topics = [topic for topic, count in unused_counts.items() if count == 7 + 9 * (len(csv_files) - 1)]
 
 # Output the unused topics to console
 logging.info(f"Topics unused across all checked days: {', '.join(consistently_unused_topics)}")
@@ -54,7 +57,7 @@ try:
         writer.writerow(["Topic Name", "Unused Count (days)"])
         # Writing data
         for topic in consistently_unused_topics:
-            writer.writerow([topic, unused_counts[topic]])  # Unused days considering every day adds 1 to the count
+            writer.writerow([topic, unused_counts[topic]])
 except PermissionError:
     logging.error(f"No permission to write to: {output_file}")
     raise
