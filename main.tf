@@ -2,10 +2,15 @@ import boto3
 import requests
 import os
 from datetime import datetime
+import logging
 from botocore.exceptions import ClientError
 
 # Initialize a DynamoDB resource with Boto3
 dynamodb = boto3.resource('dynamodb')
+
+# Set up logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 # The name of the DynamoDB table
 TABLE_NAME = os.environ.get('DYNAMODB_TABLE_NAME', 'ServiceStatusTable')
@@ -21,12 +26,12 @@ def write_to_dynamodb(service_name, status, last_updated):
                 'ServiceName': service_name,
                 'Status': status,
                 'LastUpdated': last_updated,
-                'Timestamp': datetime.now().isoformat()
+                'Timestamp': datetime.utcnow().isoformat()
             }
         )
-        return response
+        logger.info(f"Write to DynamoDB succeeded for {service_name}: {response}")
     except ClientError as e:
-        print(f"An error occurred: {e.response['Error']['Message']}")
+        logger.error(f"Error writing to DynamoDB for {service_name}: {e.response['Error']['Message']}")
         raise
 
 def lambda_handler(event, context):
@@ -35,58 +40,32 @@ def lambda_handler(event, context):
         response = requests.get(GITHUB_STATUS_API_URL)
         response.raise_for_status()  # Raises an HTTPError if the HTTP request returned an unsuccessful status code
         
-        # Parse the response
+        # Parse the response and write to DynamoDB
         data = response.json()
         status = data['status']['description']
         last_updated = data['page']['updated_at']
         
-        # Write the status information to DynamoDB
-        db_response = write_to_dynamodb('GitHub', status, last_updated)
-        print('Write to DynamoDB succeeded:', db_response)
+        write_to_dynamodb('GitHub', status, last_updated)
         
         return {
             'statusCode': 200,
             'body': 'Successfully updated the service status'
         }
-    except requests.exceptions.HTTPError as http_err:
-        # Specific error handling for HTTP errors
-        print(f'HTTP error occurred: {http_err}')
-        return {
-            'statusCode': response.status_code,
-            'body': f'HTTP error occurred: {http_err}'
-        }
-    except requests.exceptions.ConnectionError as conn_err:
-        # Specific error handling for Connection errors
-        print(f'Connection error occurred: {conn_err}')
-        return {
-            'statusCode': 503,
-            'body': f'Connection error occurred: {conn_err}'
-        }
-    except requests.exceptions.Timeout as timeout_err:
-        # Specific error handling for Timeout errors
-        print(f'Timeout error occurred: {timeout_err}')
-        return {
-            'statusCode': 504,
-            'body': f'Timeout error occurred: {timeout_err}'
-        }
     except requests.exceptions.RequestException as req_err:
-        # Broad error handling for any RequestException that isn't caught by the above
-        print(f'Request error occurred: {req_err}')
+        logger.error(f"Request to GitHub Status API failed: {req_err}")
         return {
-            'statusCode': 500,
-            'body': f'Request error occurred: {req_err}'
+            'statusCode': req_err.response.status_code if req_err.response else 503,
+            'body': 'Failed to retrieve the service status'
         }
     except ClientError as db_err:
-        # Error handling for DynamoDB client errors
-        print(f'DynamoDB client error: {db_err}')
+        logger.error(f"DynamoDB client error: {db_err}")
         return {
             'statusCode': 500,
-            'body': f'DynamoDB client error: {db_err}'
+            'body': 'Failed to write the service status to DynamoDB'
         }
     except Exception as e:
-        # A broad catch for any other exception types
-        print(f'An unexpected error occurred: {e}')
+        logger.error(f"An unexpected error occurred: {str(e)}")
         return {
             'statusCode': 500,
-            'body': f'An unexpected error occurred: {e}'
+            'body': 'An unexpected error occurred'
         }
