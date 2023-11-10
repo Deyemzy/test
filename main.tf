@@ -93,10 +93,15 @@ def is_service_of_interest(title):
         logger.error(f"Error while filtering services: {e}")
         raise
 
+# ... [previous code]
+
 def lambda_handler(event, context):
     try:
         response = requests.get(AWS_STATUS_RSS_URL)
         response.raise_for_status()
+
+        # Print the raw response content for debugging
+        logger.info(f"Raw API Response: {response.content}")
 
         root = ET.fromstring(response.content)
         for item in root.findall('.//item'):
