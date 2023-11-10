@@ -63,20 +63,21 @@ AWS_STATUS_RSS_URL = 'https://status.aws.amazon.com/rss/all.rss'
 SERVICES_TO_MONITOR = ['S3', 'EC2', 'Lambda', 'DynamoDB', 'AppSync']
 
 def write_to_dynamodb(service_name, status, last_updated):
+    item = {
+        'ServiceName': service_name,
+        'Status': status,
+        'LastUpdated': last_updated,
+        'Timestamp': datetime.utcnow().isoformat()
+    }
+    logger.info(f"Attempting to write item to DynamoDB: {item}")
     table = dynamodb.Table(TABLE_NAME)
     try:
-        response = table.put_item(
-            Item={
-                'ServiceName': service_name,
-                'Status': status,
-                'LastUpdated': last_updated,
-                'Timestamp': datetime.utcnow().isoformat()
-            }
-        )
-        logger.info(f"Write to DynamoDB succeeded for {service_name}")
+        response = table.put_item(Item=item)
+        logger.info(f"DynamoDB write response: {response}")
     except ClientError as e:
-        logger.error(f"Error writing to DynamoDB for {service_name}: {e.response['Error']['Message']}")
+        logger.error(f"Error writing to DynamoDB: {e.response['Error']['Message']}")
         raise
+
 
 def is_service_of_interest(title):
     try:
