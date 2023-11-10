@@ -69,14 +69,18 @@ def write_to_dynamodb(service_name, status, last_updated):
         'LastUpdated': last_updated,
         'Timestamp': datetime.utcnow().isoformat()
     }
-    logger.info(f"Attempting to write item to DynamoDB: {item}")
+    logger.info(f"Preparing to write item to DynamoDB: {item}")
     table = dynamodb.Table(TABLE_NAME)
     try:
         response = table.put_item(Item=item)
-        logger.info(f"DynamoDB write response: {response}")
+        logger.info(f"Response from DynamoDB: {response}")
     except ClientError as e:
-        logger.error(f"Error writing to DynamoDB: {e.response['Error']['Message']}")
+        logger.error(f"Error in DynamoDB operation: {e.response['Error']['Message']}")
         raise
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise
+
 
 
 def is_service_of_interest(title):
