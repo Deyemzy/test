@@ -1,33 +1,92 @@
-# Iterate over all CSV files
-for file_index, file_name in enumerate(csv_files, start=1):
-    logging.info(f"Processing file: {file_name}")
+import boto3
+import requests
+import os
+from datetime import datetime
+from botocore.exceptions import ClientError
+
+# Initialize a DynamoDB resource with Boto3
+dynamodb = boto3.resource('dynamodb')
+
+# The name of the DynamoDB table
+TABLE_NAME = os.environ.get('DYNAMODB_TABLE_NAME', 'ServiceStatusTable')
+
+# GitHub Status API URL
+GITHUB_STATUS_API_URL = 'https://www.githubstatus.com/api/v2/status.json'
+
+def write_to_dynamodb(service_name, status, last_updated):
+    table = dynamodb.Table(TABLE_NAME)
     try:
-        with open(os.path.join(path, file_name), 'r') as file:
-            reader = csv.reader(file)
-            # Skip headers
-            for _ in range(5): next(reader)
-            
-            # Process topic entries
-            for row in reader:
-                if not row:  # Skip empty rows
-                    continue
-                if "Total unused topics" in row[0]:  # Stop when summary lines are reached
-                    break
-                topic_name, _ = row
-                unused_counts[topic_name] += 7 + (file_index - 1)
-    except FileNotFoundError:
-        logging.error(f"File not found: {file_name}")
-        continue
-    except PermissionError:
-        logging.error(f"No permission to read file: {file_name}")
-        continue
-    
-    # Debug log to check the dictionary during processing
-    logging.debug(f"Unused counts after processing {file_name}: {unused_counts}")
+        response = table.put_item(
+            Item={
+                'ServiceName': service_name,
+                'Status': status,
+                'LastUpdated': last_updated,
+                'Timestamp': datetime.now().isoformat()
+            }
+        )
+        return response
+    except ClientError as e:
+        print(f"An error occurred: {e.response['Error']['Message']}")
+        raise
 
-# Debug log to check the threshold and unused counts
-logging.debug(f"Threshold for consistently unused topics: {7 + 9 * (len(csv_files) - 1)}")
-logging.debug(f"Unused counts: {unused_counts}")
-
-# Identify topics that are unused in all files
-consistently_unused_topics = [topic for topic, count in unused_counts.items() if count == 7 + 9 * (len(csv_files) - 1)]
+def lambda_handler(event, context):
+    try:
+        # Make a GET request to the GitHub Status API
+        response = requests.get(GITHUB_STATUS_API_URL)
+        response.raise_for_status()  # Raises an HTTPError if the HTTP request returned an unsuccessful status code
+        
+        # Parse the response
+        data = response.json()
+        status = data['status']['description']
+        last_updated = data['page']['updated_at']
+        
+        # Write the status information to DynamoDB
+        db_response = write_to_dynamodb('GitHub', status, last_updated)
+        print('Write to DynamoDB succeeded:', db_response)
+        
+        return {
+            'statusCode': 200,
+            'body': 'Successfully updated the service status'
+        }
+    except requests.exceptions.HTTPError as http_err:
+        # Specific error handling for HTTP errors
+        print(f'HTTP error occurred: {http_err}')
+        return {
+            'statusCode': response.status_code,
+            'body': f'HTTP error occurred: {http_err}'
+        }
+    except requests.exceptions.ConnectionError as conn_err:
+        # Specific error handling for Connection errors
+        print(f'Connection error occurred: {conn_err}')
+        return {
+            'statusCode': 503,
+            'body': f'Connection error occurred: {conn_err}'
+        }
+    except requests.exceptions.Timeout as timeout_err:
+        # Specific error handling for Timeout errors
+        print(f'Timeout error occurred: {timeout_err}')
+        return {
+            'statusCode': 504,
+            'body': f'Timeout error occurred: {timeout_err}'
+        }
+    except requests.exceptions.RequestException as req_err:
+        # Broad error handling for any RequestException that isn't caught by the above
+        print(f'Request error occurred: {req_err}')
+        return {
+            'statusCode': 500,
+            'body': f'Request error occurred: {req_err}'
+        }
+    except ClientError as db_err:
+        # Error handling for DynamoDB client errors
+        print(f'DynamoDB client error: {db_err}')
+        return {
+            'statusCode': 500,
+            'body': f'DynamoDB client error: {db_err}'
+        }
+    except Exception as e:
+        # A broad catch for any other exception types
+        print(f'An unexpected error occurred: {e}')
+        return {
+            'statusCode': 500,
+            'body': f'An unexpected error occurred: {e}'
+        }
