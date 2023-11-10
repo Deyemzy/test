@@ -125,3 +125,127 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.error(f"An unexpected error occurred: {str(e)}")
         return {'statusCode': 500, 'body': 'An unexpected error occurred'}
+
+
+
+
+# ... [previous code]
+
+def lambda_handler(event, context):
+    try:
+        response = requests.get(AWS_STATUS_RSS_URL)
+        response.raise_for_status()
+
+        root = ET.fromstring(response.content)
+        for item in root.findall('.//item'):
+            title = item.find('title').text
+            pub_date = item.find('pubDate').text
+            description = item.find('description').text  # Additional historical info may be in the description
+
+            if is_service_of_interest(title):
+                service_name = extract_service_name(title)  # Implement this function based on your parsing logic
+                status = title  # or parse status from title/description
+
+                logger.info(f"Processing historical status update for {service_name}")
+                write_to_dynamodb(service_name, status, pub_date)
+
+        return {'statusCode': 200, 'body': 'Successfully processed AWS service history'}
+    except requests.exceptions.RequestException as req_err:
+        logger.error(f"Request to AWS RSS feed failed: {req_err}")
+        return {'statusCode': req_err.response.status_code if req_err.response else 503, 'body': 'Failed to retrieve AWS service history'}
+    # ... [rest of the error handling code]
+
+def extract_service_name(title):
+    # Implement parsing logic to extract the service name from the title
+    # This is a placeholder function and needs actual implementation based on the title format in the RSS feed
+    return title.split(':')[0]
+
+# ... [rest of the code]
+
+--------------------------------------------
+
+
+
+import boto3
+import requests
+import os
+import logging
+import xml.etree.ElementTree as ET
+from datetime import datetime
+from botocore.exceptions import ClientError
+
+# Initialize a DynamoDB resource with Boto3
+dynamodb = boto3.resource('dynamodb')
+
+# Set up logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# DynamoDB Table Name
+TABLE_NAME = os.environ.get('DYNAMODB_TABLE_NAME', 'ServiceStatusTable')
+
+# AWS Service Health Dashboard RSS Feed URL
+AWS_STATUS_RSS_URL = 'https://status.aws.amazon.com/rss/all.rss'
+
+def write_to_dynamodb(service_name, status, last_updated):
+    table = dynamodb.Table(TABLE_NAME)
+    try:
+        response = table.put_item(
+            Item={
+                'ServiceName': service_name,
+                'Status': status,
+                'LastUpdated': last_updated,
+                'Timestamp': datetime.utcnow().isoformat()
+            }
+        )
+        logger.info(f"Write to DynamoDB succeeded for {service_name}")
+    except ClientError as e:
+        logger.error(f"Error writing to DynamoDB for {service_name}: {e.response['Error']['Message']}")
+        raise
+
+def extract_service_info(title):
+    try:
+        parts = title.split(' (')
+        service_name = parts[0] if len(parts) > 0 else 'Unknown Service'
+        region = parts[1].rstrip(')') if len(parts) > 1 else 'Unknown Region'
+        
+        # Combine service name and region
+        full_service_name = f"{service_name} ({region})"
+
+        return full_service_name
+    except Exception as e:
+        logger.error(f"Error extracting service info: {str(e)}")
+        return 'Unknown Service'
+
+# Pre-approved list of services to monitor
+PRE_APPROVED_SERVICES = ["Amazon EC2 (N. Virginia)", "Amazon S3 (Ohio)", "Amazon Lambda (Oregon)"]
+
+def is_service_of_interest(full_service_name):
+    return full_service_name in PRE_APPROVED_SERVICES
+
+def lambda_handler(event, context):
+    try:
+        response = requests.get(AWS_STATUS_RSS_URL)
+        response.raise_for_status()
+
+        root = ET.fromstring(response.content)
+        for item in root.findall('.//item'):
+            title = item.find('title').text if item.find('title') is not None else 'No Title'
+            pub_date = item.find('pubDate').text if item.find('pubDate') is not None else 'No Date'
+
+            full_service_name = extract_service_info(title)
+
+            logger.info(f"Processing event for {full_service_name}")
+            write_to_dynamodb(full_service_name, title, pub_date)
+
+        return {'statusCode': 200, 'body': 'Successfully processed AWS service events'}
+    except requests.exceptions.RequestException as req_err:
+        logger.error(f"Request to AWS RSS feed failed: {req_err}")
+        return {'statusCode': req_err.response.status_code if req_err.response else 503, 'body': 'Failed to retrieve AWS service events'}
+    except ET.ParseError as parse_err:
+        logger.error(f"XML parsing error: {parse_err}")
+        return {'statusCode': 500, 'body': 'Failed to parse RSS feed'}
+    except Exception as e:
+        logger.error(f"An unexpected error occurred: {str(e)}")
+        return {'statusCode': 500, 'body': 'An unexpected error occurred'}
+
