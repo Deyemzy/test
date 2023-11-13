@@ -289,17 +289,21 @@ def extract_service_info(title):
 
 def write_to_dynamodb(service_name, status, last_updated, description, region):
     table = dynamodb.Table(TABLE_NAME)
+    item = {
+        'ServiceName': service_name,
+        'Status': status,
+        'LastUpdated': last_updated,
+        'Description': description,
+        'Region': region,
+        'Timestamp': datetime.utcnow().isoformat()
+    }
+    
     try:
-        response = table.put_item(
-            Item={
-                'ServiceName': service_name,
-                'Status': status,
-                'LastUpdated': last_updated,
-                'Description': description,
-                'Region': region,
-                'Timestamp': datetime.utcnow().isoformat()
-            }
-        )
+        # Log the item details
+        logger.info(f"Updating DynamoDB with item: {item}")
+
+        # Write the item to DynamoDB
+        response = table.put_item(Item=item)
         logger.info(f"Write to DynamoDB succeeded for {service_name} in {region}")
     except ClientError as e:
         logger.error(f"Error writing to DynamoDB for {service_name} in {region}: {e.response['Error']['Message']}")
