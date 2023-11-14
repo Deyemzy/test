@@ -347,6 +347,43 @@ def lambda_handler(event, context):
 
 
 
-I revamped the CI/CD pipeline for bots, ensuring compliance with Merck's security standards to enhance business agility. My actions included designing a scalable, secure pipeline, integrating comprehensive security checks, and implementing advanced bot monitoring. I focused on increasing the pipeline's usage and efficiency, tracking key metrics like service requests, daily commits, pull requests, and deployment frequency for continuous improvement. Additionally, I gathered feedback for process refinement and provided documentation and training for the team, all aimed at achieving more frequent deployments with fewer incidents.
+----
+import boto3
+import random
+from datetime import datetime
+
+# Initialize a DynamoDB resource
+dynamodb = boto3.resource('dynamodb')
+
+# Specify your DynamoDB table name
+TABLE_NAME = 'YourTableName'
+table = dynamodb.Table(TABLE_NAME)
+
+def create_dummy_record(device_id):
+    # Generate dummy data
+    device_name = f"Device_{device_id}"
+    location = random.choice(["United States", "Singapore", "Czech"])
+    up_status = random.choice(["Online", "Offline"])
+    connection_status = random.choice(["Connected", "Disconnected"])
+    last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.utcnow().isoformat()
+
+    return {
+        'DeviceName': device_name,
+        'Location': location,
+        'UpStatus': up_status,
+        'ConnectionStatus': connection_status,
+        'LastUpdated': last_updated,
+        'Timestamp': timestamp
+    }
+
+def populate_table():
+    for i in range(200):
+        record = create_dummy_record(i)
+        table.put_item(Item=record)
+
+if __name__ == "__main__":
+    populate_table()
+    print("Table population completed.")
 
 
