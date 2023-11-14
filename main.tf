@@ -347,7 +347,6 @@ def lambda_handler(event, context):
 
 
 
-To revamp the CI/CD pipeline and bot infrastructure while complying with Merck's security standards, key actions included designing a scalable and efficient pipeline, integrating stringent security measures, and implementing advanced monitoring for bots. We focused on enhancing business agility for faster, more frequent deployments. Metrics such as service requests, incidents, daily commits, pull requests, and deployment frequency were tracked and analyzed for continuous improvement. This effort also involved user feedback incorporation, comprehensive documentation, and team training, all aimed at reducing incidents, increasing pipeline usage, and improving monitoring effectiveness.
-
+I revamped the CI/CD pipeline for bots, ensuring compliance with Merck's security standards to enhance business agility. My actions included designing a scalable, secure pipeline, integrating comprehensive security checks, and implementing advanced bot monitoring. I focused on increasing the pipeline's usage and efficiency, tracking key metrics like service requests, daily commits, pull requests, and deployment frequency for continuous improvement. Additionally, I gathered feedback for process refinement and provided documentation and training for the team, all aimed at achieving more frequent deployments with fewer incidents.
 
 
