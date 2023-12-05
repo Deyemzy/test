@@ -386,4 +386,42 @@ if __name__ == "__main__":
     populate_table()
     print("Table population completed.")
 
+-------------------------------------------------------------------
+
+
+import requests
+import json
+import os
+
+# API URL
+url = 'xxxx'
+
+# API Token from environment variable or input
+api_token = os.getenv('API_TOKEN') or input("Enter API Token: ")
+
+# Headers
+headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'X-AUTH-TOKEN': api_token
+}
+
+# Payload
+payload = {
+    "deviceld": [100497, 1005498, 92229, 92230, 90076, 90077, 93536, 93535],
+    "timespanBetween": {
+        "startTime": 1692688056000,
+        "endTime": 1700000000000  # Replace with actual end time in Unix timestamp
+    },
+    "severity": [2, 3, 4]  # Severity levels for 'Critical', 'Error', and 'Warning'
+}
+
+# POST request
+response = requests.post(url, headers=headers, data=json.dumps(payload))
+
+# Checking the response
+if response.status_code == 200:
+    print("Success:", response.json())
+else:
+    print("Failed:", response.text)
 
