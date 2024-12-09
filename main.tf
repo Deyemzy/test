@@ -425,3 +425,46 @@ if response.status_code == 200:
 else:
     print("Failed:", response.text)
 
+
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation Template to deploy Windows Server 2022 with AD role  
+
+Parameters:  
+  InstanceType:  
+    Type: String  
+    Default: m5a.large  
+    Description: EC2 instance type  
+
+  KeyName:  
+    Type: AWS::EC2::KeyPair::KeyName  
+    Description: Name of the existing KeyPair to enable RDP access  
+
+  SubnetId:  
+    Type: AWS::EC2::Subnet::Id  
+    Description: The Subnet ID for the instance  
+
+  SecurityGroupId:  
+    Type: AWS::EC2::SecurityGroup::Id  
+    Description: Security Group ID for the instance  
+
+  ImageId:  
+    Type: AWS::EC2::Image::Id  
+    Description: AMI ID for Windows Server 2022  
+
+Resources:  
+  WindowsADServer:  
+    Type: AWS::EC2::Instance  
+    Properties:  
+      InstanceType: !Ref InstanceType  
+      KeyName: !Ref KeyName  
+      SubnetId: !Ref SubnetId  
+      SecurityGroupIds:  
+        - !Ref SecurityGroupId  
+      ImageId: !Ref ImageId  
+      Tags:  
+        - Key: Name  
+          Value: Windows-Server-2022-AD  
+      UserData:  
+        Fn::Base64: !Sub |  
+
