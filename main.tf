@@ -20,23 +20,7 @@ Parameters:
     Description: Administrator Password for the test instance
     Type: String
     NoEcho: true
-Weekly Work Summary
-1. Resolved Server Connectivity Issues:
 
-Worked on a Windows server hosted in the cloud to ensure it was running smoothly.
-Fixed connection issues by checking security settings and confirming the server’s alignment with organizational standards.
-2. Research on Trump 2.0 Policy Changes:
-
-Researched 10 major policy changes expected under Trump 2.0, focusing on their impact on government contracts and healthcare opportunities.
-Organized findings into a clear report using insights from trusted sources like PwC, Forbes, and the Immigration Reform Law Institute.
-3. Team Collaboration on Process Improvements:
-
-Participated in a session discussing improvements for pilot workflows and administrative processes.
-Contributed to planning better ways to manage applications, track progress, and solve configuration issues.
-4. Streamlining User Access with Directory Services:
-
-Set up a system to ensure secure and smooth user access for a platform called MuleSoft.
-Tested and confirmed that users can connect successfully, laying the groundwork for further improvements
 Resources:
   TestWindowsInstance:
     Type: AWS::EC2::Instance
