@@ -49,8 +49,9 @@ Resources:
       Tags:
         - Key: Name
           Value: Test-Windows-AD-Client
-
-  TestWindowsSecurityGroup:
+Configured and validated LDAP on the Active Directory server (172.25.48.62) by opening port 389 on both the EC2 Security Group and Windows Firewall. Ensured DNS resolution for innolab.dmagallery.com within the Route 53 private hosted zone and confirmed connectivity using nslookup and Test-NetConnection. The AD server is now ready to act as the Identity Provider (IDP) for MuleSoft, with next steps focused on integrating MuleSoft with LDAP for authentication testing.
+ Finalize LDAP integration with MuleSoft by configuring the AD server (172.25.48.62) as the Identity Provider (IDP). Begin testing user authentication and directory queries against the Active Directory server to ensure successful connectivity and proper user retrieval within the MuleSoft environment. Document findings and troubleshoot any issues as needed to ensure smooth integration. 
+TestWindowsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allow RDP and ICMP traffic for testing
