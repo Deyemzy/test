@@ -1,6 +1,20 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: CloudFormation Template to Create a Test Windows EC2 Server
+Hi Andy,
 
+I hope you're doing well. As discussed, I’m working on setting up the EC2 instance required for the JSCAPE Managed File Transfer (MFT) components in the Converge Platform demo environment.
+
+The system requirements are as follows:
+
+2 Core CPU
+8 GB RAM
+Java 11
+Linux OS
+To align with our Infrastructure as Code (IaC) approach, I plan to use Terraform for provisioning. I wanted to check:
+
+If you have any preferences or existing Terraform scripts that I can repurpose?
+Should the EC2 instance be integrated with any specific configurations or tagging standards as part of the platform?
+Let me know a good time for a quick sync-up to confirm these details and proceed.
 Parameters:
   InstanceType:
     Description: EC2 instance type for the test server
