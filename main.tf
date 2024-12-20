@@ -1,6 +1,15 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: CloudFormation Template to Create a Test Windows EC2 Server
 
+Timesheet for Yesterday
+Reviewed the JSCAPE Managed File Transfer (MFT) system requirements and documentation shared via email.
+Analyzed the Converge platform infrastructure setup, including the existing AWS environment and Kubernetes clusters, to identify resource allocation for the MFT components.
+Initiated coordination with Andy to ensure alignment on EC2 instance provisioning using Terraform while adhering to infrastructure-as-code best practices.
+Timesheet for Today
+Began provisioning the EC2 instance for JSCAPE MFT components, ensuring system requirements (2 Core CPU, 8 GB RAM) are met and utilizing Terraform scripts for automation and version control.
+Drafted a plan for integrating the JSCAPE MFT Server, Monitor, and Gateway into the Converge platform, keeping scalability and compliance in focus.
+
+
 Parameters:
   InstanceType:
     Description: EC2 instance type for the test server
