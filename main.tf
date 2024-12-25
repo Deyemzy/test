@@ -9,7 +9,6 @@ Parameters:
 
     AllowedValues: [t2.medium, t3.medium, t3.large, t3.xlarge]
   KeyPairName:
-I focused on setting up and configuring the JSCAPE module within the AWS GovCloud environment. This included transitioning from a Windows-based AMI to an Amazon Linux 2 AMI, configuring key pairs using AWS SSM Parameter Store, and developing user data scripts to install Java 11. I created and refined security groups for the JSCAPE instance, public ingress, and private ingress, ensuring alignment with networking best practices and traffic flows through existing load balancers.
     Description: Name of the existing key pair for RDP access
     Type: AWS::EC2::KeyPair::KeyName
   VpcId:
