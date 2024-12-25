@@ -7,7 +7,6 @@ Parameters:
     Type: String
     Default: t3.medium
 
-Today, I worked on updating IAM roles using the latest policy attachment methods and merged the JSCAPE branch into the MEA branch. After discussing with Andy, we decided to reuse the existing ALB from the MoveIt setup instead of creating new load balancers. I updated listener rules and adjusted traffic routing to support JSCAPE. Additionally, I refined the Terraform configurations, reviewed security group rules, and focused on isolating JSCAPE-specific resources, ensuring everything is ready for deployment while staying aligned with the MEA infrastructure.
     AllowedValues: [t2.medium, t3.medium, t3.large, t3.xlarge]
   KeyPairName:
 I focused on setting up and configuring the JSCAPE module within the AWS GovCloud environment. This included transitioning from a Windows-based AMI to an Amazon Linux 2 AMI, configuring key pairs using AWS SSM Parameter Store, and developing user data scripts to install Java 11. I created and refined security groups for the JSCAPE instance, public ingress, and private ingress, ensuring alignment with networking best practices and traffic flows through existing load balancers.
