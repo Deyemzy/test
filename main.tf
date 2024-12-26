@@ -67,3 +67,74 @@ TestWindowsSecurityGroup:
       Tags:
         - Key: Name
           Value: Test-Windows-SG
+locals {
+  private_nlb = {
+    certificate  = aws_acm_certificate.this.arn
+    domain       = aws_lb.private.dns_name
+    hosted_zone  = aws_lb.private.zone_id
+    arn          = aws_lb.private.arn
+    security_group = aws_security_group.private.id
+  }
+}
+
+# Private Network Load Balancer
+resource "aws_lb" "private" {
+  name               = "${local.name}-private"
+  internal           = true
+  load_balancer_type = "network"
+  subnets           = var.private_subnets
+
+  enable_deletion_protection = true
+
+  access_logs {
+    bucket  = var.logging_bucket
+    prefix  = "nlb/private"
+    enabled = true
+  }
+}
+
+# FTPS Listener (990)
+resource "aws_lb_listener" "ftps" {
+  load_balancer_arn = aws_lb.private.arn
+  port              = 990
+  protocol          = "TLS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = aws_acm_certificate.this.arn
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.ftps.arn
+  }
+}
+
+# FTP Listener (21) - Commented out by default
+/*
+resource "aws_lb_listener" "ftp" {
+  load_balancer_arn = aws_lb.private.arn
+  port              = 21
+  protocol          = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.ftp.arn
+  }
+}
+*/
+
+# Security Group for Private NLB
+resource "aws_security_group" "private" {
+  name        = "${local.name}-private-lb"
+  description = "${local.name} Private Load Balancer"
+  vpc_id      = var.vpc_id
+}
+
+# Security Group Rules
+resource "aws_security_group_rule" "private_ingress" {
+  security_group_id        = aws_security_group.private.id
+  protocol                = -1
+  from_port               = 0
+  to_port                 = 0
+  type                    = "ingress"
+  description             = "Public LB"
+  source_security_group_id = aws_security_group.public.id
+}
